@@ -29,7 +29,7 @@ class StpOptimizer:
             constraints = self.getConstraints(self.p)
         capacities = self.getCapacities()
         x0 = np.array([0] * self.prodNumber)
-        sol = minimize(objective, x0, method='trust-constr', bounds=capacities, constraints=constraints)
+        sol = minimize(objective, x0, method='SLSQP', bounds=capacities, constraints=constraints)
 
         if not alpha:
             self.stp_solution = {}
