@@ -1,8 +1,6 @@
 import json
 from json import JSONEncoder
 
-import easy_pdf.rendering
-from django.core.files.storage import default_storage
 from django.http import JsonResponse, FileResponse, HttpResponse
 from django.shortcuts import render
 from django.views import View
