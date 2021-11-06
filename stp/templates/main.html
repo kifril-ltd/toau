@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+{% block title %}Стохастическая задача объемного планирования{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="d-flex justify-content-center m-3">
+            <button class="btn btn-primary mx-2" id="save_test">Сохранить тест</button>
+            <button class="btn btn-primary mx-2" id="open_test" onclick="document.getElementById('importJson').click()">
+                Открыть тест
+            </button>
+            <input id="importJson" value="import json" type="file" accept="application/json" style="display:none"/>
+            <form class="d-flex flex-column justify-content-center w-50">
+                <div class="form-group d-flex justify-content-between align-items-center">
+                    <lable for="resourcesNumber">Количество используемых ресурсов:</lable>
+                    <input type="number" id="resourcesNumber" name="resourcesNumber" value="1" min="0">
+                </div>
+                <div class="form-group d-flex justify-content-between align-items-center">
+                    <lable for="productsNumber">Количество изготовляемых продуктов:</lable>
+                    <input type="number" id="productsNumber" name="productsNumber" value="1" min="0">
+                </div>
+
+                <input type="submit" value="Сгенерировать таблицу" id="generateTable" name="generateTable">
+            </form>
+            <button class="btn btn-success mx-2" id="calculate" disabled>Расчитать оптимальный план</button>
+        </div>
+
+        <div id="tablePlace" name="tablePlace">
+
+        </div>
+
+        <div id="solution" hidden>
+            <h1>Решение стохастической задачи объемного планирования</h1>
+
+            <h3>Решение с учетом вероятностного характера</h3>
+            <p> Объемы выпуска продукции: <input id="stp_sol_x" type="text" width="100%"/></p>
+            <p>Выручка: <input id="stp_sol_val" type="text"/></p>
+
+            <h3>Решение без учета вероятностного характера</h3>
+            <p> Объемы выпуска продукции: <input id="non_stp_sol_x" type="text"/></p>
+            <p>Выручка: <input id="non_stp_sol_val" type="text"/></p>
+
+            <h3>Оценка полученного решения</h3>
+            <h5>Относительное ухудшение целевой функции: <input id="rif" type="text"/></h5>
+            <h5>Относительное увеличение потребляемых ресурсов: <input id="ricr" type="text"/></h5>
+
+            <h3>Оценка влияния уровня значимости на решение задачи</h3>
+            <div id="p_table">
+
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        $('#generateTable').click(function (e) {
+            //$('#generateTable').prop('disabled', true);
+            e.preventDefault();
+
+            let resourcesNumber = $('#resourcesNumber').val();
+            let productsNumber = $('#productsNumber').val();
+            let table = createInputTable(resourcesNumber, productsNumber);
+            let tableDiv = $('#tablePlace');
+            tableDiv.children().remove();
+            tableDiv.append(table);
+
+            $('#calculate').prop('disabled', false);
+        });
+
+        $('#calculate').click(function () {
+            let inputDataObj = getInputData();
+
+            $.ajax({
+                data: {
+                    data: JSON.stringify(inputDataObj),
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                url: "{% url 'calc' %}",
+                method: 'post',
+                success: function (data) {
+                    console.log(data);
+                    displayResult(JSON.parse(data));
+                },
+                error: function (response) {
+
+                }
+            });
+            $('#solution').prop('hidden', false);
+        });
+
+        $('#save_test').click(function (e) {
+            let data = getInputData();
+            let json = JSON.stringify(data);
+
+            json = [json];
+            var blob1 = new Blob(json, {type: "text/plain;charset=utf-8"});
+
+            //Check the Browser.
+            var isIE = false || !!document.documentMode;
+            if (isIE) {
+                window.navigator.msSaveBlob(blob1, "test.json");
+            } else {
+                var url = window.URL || window.webkitURL;
+                link = url.createObjectURL(blob1);
+                var a = $("<a />");
+                a.attr("download", "test.json");
+                a.attr("href", link);
+                $("body").append(a);
+                a[0].click();
+                $("body").remove(a);
+            }
+        });
+
+        function uploadJson(id, callback) {
+            document.getElementById(id).onchange = function (evt) {
+                try {
+                    let files = evt.target.files;
+                    if (!files.length) {
+                        alert('No file selected!');
+                        return;
+                    }
+                    let file = files[0];
+                    let reader = new FileReader();
+                    const self = this;
+                    reader.onload = (event) => {
+                        callback(event.target.result);
+                    };
+                    reader.readAsText(file);
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+        }
+
+        uploadJson('importJson', function (json) {
+            let data = JSON.parse(json)
+            $('#resourcesNumber').val(data['resources_number']);
+            $('#productsNumber').val(data['products_number']);
+
+            let table = createInputTable(data['resources_number'], data['products_number'], data)
+            let tableDiv = $('#tablePlace');
+            tableDiv.children().remove();
+            tableDiv.append(table);
+
+            $('#calculate').prop('disabled', false);
+        });
+
+        function getInputData() {
+            let inputs = $('#inputTable :input');
+            let data = {};
+            data['resources_number'] = $('#resourcesNumber').val();
+            data['products_number'] = $('#productsNumber').val();
+            for (const val of inputs) {
+                const idSplit = val.id.split('_');
+                console.log(idSplit[0]);
+                if (!(idSplit[0] in data)) data[idSplit[0]] = [];
+                data[idSplit[0]].push(val.value);
+            }
+            return data;
+        }
+
+        function createInputTable(resourcesNumber, productsNumber, data = false) {
+            let table = document.createElement('table');
+            table.setAttribute('id', 'inputTable');
+            table.setAttribute('border', '1')
+            let resouces = document.createElement('tr');
+            let resourcesProps = document.createElement('tr');
+            let emptyCol = document.createElement('td');
+            emptyCol.setAttribute('rowspan', 2);
+            emptyCol.innerHTML = '#';
+            resouces.appendChild(emptyCol);
+            for (let i = 0; i < resourcesNumber; i++) {
+                let resourceCol = document.createElement('td');
+                resourceCol.setAttribute('colspan', 2);
+                resourceCol.innerHTML = `Ресурс ${i + 1}`;
+                resouces.appendChild(resourceCol);
+
+                let resourceMO = document.createElement('td');
+                resourceMO.innerHTML = `МО(Р${i + 1})`;
+                let resourceSKO = document.createElement('td');
+                resourceSKO.innerHTML = `СКО(Р${i + 1})`;
+                resourcesProps.appendChild(resourceMO);
+                resourcesProps.appendChild(resourceSKO);
+            }
+            let productConstraint = document.createElement('td');
+            productConstraint.setAttribute('colspan', 2);
+            productConstraint.innerHTML = 'Огр. на ресурс';
+            resouces.appendChild(productConstraint);
+
+            let resConstraintMO = document.createElement('td');
+            resConstraintMO.innerHTML = `МО(ОНР)`;
+            let resConstraintSKO = document.createElement('td');
+            resConstraintSKO.innerHTML = `СКО(ОНР)`;
+            resourcesProps.appendChild(resConstraintMO);
+            resourcesProps.appendChild(resConstraintSKO);
+
+            let pValue = document.createElement('td');
+            pValue.setAttribute('rowspan', 2);
+            pValue.innerHTML = 'Ур.знач.';
+            resouces.appendChild(pValue);
+
+            table.append(resouces);
+            table.append(resourcesProps);
+
+            for (let i = 0; i < productsNumber; i++) {
+                let prodRow = document.createElement('tr');
+                let numCell = document.createElement('td');
+                numCell.innerHTML = `${i + 1}`;
+                prodRow.appendChild(numCell);
+                for (let j = 0; j < resourcesNumber; j++) {
+                    let resMCell = document.createElement('td');
+                    let resSKOCell = document.createElement('td');
+
+                    let resMInput = document.createElement('input');
+                    resMInput.setAttribute('type', 'number');
+                    resMInput.setAttribute('size', 5);
+                    resMInput.setAttribute('step', 0.01);
+                    resMInput.setAttribute('min', 0);
+                    resMInput.value = data ? data['a'][i * resourcesNumber + j] : '0';
+                    resMInput.setAttribute('id', `a_${i}_${j}`);
+                    resMCell.appendChild(resMInput);
+
+                    let resSKOInput = document.createElement('input');
+                    resSKOInput.setAttribute('type', 'number');
+                    resSKOInput.setAttribute('size', 5);
+                    resSKOInput.setAttribute('step', 0.01);
+                    resSKOInput.setAttribute('min', 0);
+                    resSKOInput.value = data ? data['s'][i * resourcesNumber + j] : '0';
+                    resSKOInput.setAttribute('id', `s_${i}_${j}`);
+                    resSKOCell.appendChild(resSKOInput);
+
+                    prodRow.appendChild(resMCell);
+                    prodRow.appendChild(resSKOCell);
+                }
+
+                let prodMCell = document.createElement('td');
+                let prodSKOCell = document.createElement('td');
+
+                let prodMInput = document.createElement('input');
+                prodMInput.setAttribute('type', 'number');
+                prodMInput.setAttribute('size', 5);
+                prodMInput.setAttribute('step', 0.01);
+                prodMInput.setAttribute('min', 0);
+                prodMInput.value = data ? data['b'][i] : '0';
+                prodMInput.setAttribute('id', `b_${i}`);
+                prodMCell.appendChild(prodMInput);
+
+                let prodSKOInput = document.createElement('input');
+                prodSKOInput.setAttribute('type', 'number');
+                prodSKOInput.setAttribute('size', 5);
+                prodSKOInput.setAttribute('step', 0.01);
+                prodSKOInput.setAttribute('min', 0);
+                prodSKOInput.value = data ? data['t'][i] : '0';
+                prodSKOInput.setAttribute('id', `t_${i}`);
+                prodSKOCell.appendChild(prodSKOInput);
+
+                prodRow.appendChild(prodMCell);
+                prodRow.appendChild(prodSKOCell);
+
+                let pValueCell = document.createElement('td');
+                let pValueInput = document.createElement('input');
+                pValueInput.setAttribute('type', 'number');
+                pValueInput.setAttribute('size', 5);
+                pValueInput.setAttribute('step', 0.01);
+                pValueInput.setAttribute('min', 0);
+                pValueInput.value = data ? data['p'][i] : '0';
+                pValueInput.setAttribute('id', `p_${i}`);
+                pValueCell.appendChild(pValueInput);
+
+                prodRow.appendChild(pValueCell);
+
+                table.append(prodRow);
+            }
+            let prodPrice = document.createElement('tr');
+            let prodPriceName = document.createElement('td');
+            prodPriceName.setAttribute('colspan', 3);
+            prodPriceName.innerHTML = 'Цена продукта';
+            prodPrice.appendChild(prodPriceName);
+
+            let prodLowConst = document.createElement('tr');
+            let prodLowConstName = document.createElement('td');
+            prodLowConstName.setAttribute('colspan', 3);
+            prodLowConstName.innerHTML = 'Огр. на выпуск снизу';
+            prodLowConst.appendChild(prodLowConstName);
+
+            let prodUpConst = document.createElement('tr');
+            let prodUpConstName = document.createElement('td');
+            prodUpConstName.setAttribute('colspan', 3);
+            prodUpConstName.innerHTML = 'Огр. на выпуск сверху';
+            prodUpConst.appendChild(prodUpConstName);
+
+            for (let i = 0; i < productsNumber; i++) {
+                let prodPriceCell = document.createElement('td');
+                let prodPriceInput = document.createElement('input');
+                prodPriceInput.setAttribute('type', 'number');
+                prodPriceInput.setAttribute('size', 5);
+                prodPriceInput.setAttribute('step', 0.01);
+                prodPriceInput.setAttribute('min', 0);
+                prodPriceInput.value = data ? data['c'][i] : '0';
+                prodPriceInput.setAttribute('id', `c_${i}`);
+                prodPriceCell.appendChild(prodPriceInput);
+                prodPrice.appendChild(prodPriceCell);
+
+                let prodLowCell = document.createElement('td');
+                let prodLowInput = document.createElement('input');
+                prodLowInput.setAttribute('type', 'number');
+                prodLowInput.setAttribute('size', 5);
+                prodLowInput.setAttribute('step', 0.01);
+                prodLowInput.setAttribute('min', 0);
+                prodLowInput.value = data ? data['dl'][i] : '0';
+                prodLowInput.setAttribute('id', `dl_${i}`);
+                prodLowCell.appendChild(prodLowInput);
+                prodLowConst.appendChild(prodLowCell);
+
+                let prodUpCell = document.createElement('td');
+                let prodUpInput = document.createElement('input');
+                prodUpInput.setAttribute('type', 'number');
+                prodUpInput.setAttribute('size', 5);
+                prodUpInput.setAttribute('step', 0.01);
+                prodUpInput.setAttribute('min', 0);
+                prodUpInput.value = data ? data['du'][i] : '0';
+                prodUpInput.setAttribute('id', `du_${i}`);
+                prodUpCell.appendChild(prodUpInput);
+                prodUpConst.appendChild(prodUpCell);
+            }
+
+            table.append(prodPrice);
+            table.append(prodLowConst);
+            table.append(prodUpConst);
+
+            return table;
+        }
+
+        function displayResult(data) {
+            $('#stp_sol_x').val(data['stp_sol']['x']);
+            $('#stp_sol_val').val(data['stp_sol']['func_value']);
+            $('#non_stp_sol_x').val(data['non_stp_sol']['x']);
+            $('#non_stp_sol_val').val(data['non_stp_sol']['func_value']);
+            $('#rif').val(data['rif']);
+            $('#ricr').val(data['ricr']);
+
+            let table = createPTable(data);
+            let tableDiv = $('#p_table');
+            tableDiv.children().remove();
+            tableDiv.append(table);
+        }
+
+        function createPTable(data) {
+            let table = document.createElement('table');
+            table.setAttribute('id', 'pTable');
+            table.setAttribute('border', '1')
+
+            let headRow = document.createElement('tr');
+            let pValue = document.createElement('td');
+            pValue.setAttribute('align', 'center');
+            pValue.innerHTML = 'Ур. знач.';
+            headRow.appendChild(pValue);
+            let alpha = 0.5;
+            while (alpha <= 1) {
+                let alphaCol = document.createElement('td');
+                alphaCol.setAttribute('align', 'center');
+                alphaCol.innerHTML = alpha.toFixed(1);
+                headRow.appendChild(alphaCol);
+                alpha += 0.1;
+            }
+            table.appendChild(headRow);
+            for (let i = 0; i < data['products_number']; i++){
+                let prodRow = document.createElement('tr');
+                let prodHead = document.createElement('td');
+                prodHead.setAttribute('align', 'center');
+                prodHead.innerHTML = `Продукт ${i + 1}`;
+                prodRow.appendChild(prodHead);
+                for (const sol of data['p_solutions']) {
+                    let solCol = document.createElement('td');
+                    solCol.setAttribute('align', 'center');
+                    solCol.innerHTML = sol['x'][i];
+                    prodRow.appendChild(solCol);
+                }
+                table.appendChild(prodRow);
+            }
+            let procRow = document.createElement('tr');
+            let procHead = document.createElement('td');
+            procHead.setAttribute('align', 'center');
+            procHead.innerHTML= 'Выручка';
+            procRow.appendChild(procHead);
+            for (const sol of data['p_solutions']) {
+                let procCol = document.createElement('td');
+                procCol.setAttribute('align', 'center');
+                procCol.innerHTML = sol['func_value'];
+                procRow.appendChild(procCol);
+            }
+            table.appendChild(procRow);
+            return table;
+        }
+    </script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "easy_pdf/base.html" %}
+{% load static %}
+{% load tags %}
+{% block extra_style %}
+    <style type="text/css">
+        @font-face {
+            font-family: Roboto-Regular;
+            src: url({% static 'fonts/Roboto-Regular.ttf' %});
+        }
+
+        body {
+            font-family: Roboto-Regular, Arial, "sans-serif";
+            color: #000000;
+            font-size: 14px;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div id="content">
+        <h1>Otchet po resheniyu stohasticheskoj zadachi ob"emnogo planirovaniya</h1>
+        <h3>Poluchennoe reshenie s uchetom veroyatnostonogo haraktera</h3>
+        <p>Ob"emy vypuska produkcii: {{ stp_sol.x }}</p>
+        <p>Vyruchka: {{ stp_sol.func_value }}</p>
+        <h3>Poluchennoe reshenie bez ucheta veroyatnostonogo haraktera</h3>
+        <p>Ob"emy vypuska produkcii: {{ non_stp_sol.x }}</p>
+        <p>Vyruchka: {{ non_stp_sol.func_value }}</p>
+        <h3>Koeficienty ochenki poluchennogo resheniya</h3>
+        <h5>Onositel'noe uhudshenie celevoj funkcii: {{ rif }}</h5>
+        <h5>Onositel'noe uvelichsnie potreblyaemyh resursov: {{ ricr }}</h5>
+        <h3>Ocenka vliyaniya urovnya znachimosti na reshenie zadachi</h3>
+        <table id="p_table" border="1" align="center">
+            <tr>
+                <td align="center">alpha</td>
+                <td align="center">0.5</td>
+                <td align="center">0.6</td>
+                <td align="center">0.7</td>
+                <td align="center">0.8</td>
+                <td align="center">0.9</td>
+                <td align="center">1</td>
+            </tr>
+            {% for i in prod_range %}
+                <tr>
+                    <td align="center">Produkt {{ i }}</td>
+                    {% for sol in p_solutions %}
+                        <td align="center">{{ sol.x|index:i|floatformat:4 }}</td>
+                    {% endfor %}
+                </tr>
+
+            {% endfor %}
+            <tr>
+                    <td align="center">Vyruchka</td>
+                    {% for sol in p_solutions %}
+                        <td align="center">{{ sol.func_value|floatformat:4 }}</td>
+                    {% endfor %}
+            </tr>
+
+        </table>
+    </div>
+{% endblock %}
