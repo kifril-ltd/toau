@@ -168,16 +168,16 @@
             emptyCol.setAttribute('rowspan', 2);
             emptyCol.innerHTML = '#';
             resouces.appendChild(emptyCol);
-            for (let i = 0; i < resourcesNumber; i++) {
+            for (let i = 0; i < productsNumber; i++) {
                 let resourceCol = document.createElement('td');
                 resourceCol.setAttribute('colspan', 2);
-                resourceCol.innerHTML = `Ресурс ${i + 1}`;
+                resourceCol.innerHTML = `Продукт ${i + 1}`;
                 resouces.appendChild(resourceCol);
 
                 let resourceMO = document.createElement('td');
-                resourceMO.innerHTML = `МО(Р${i + 1})`;
+                resourceMO.innerHTML = `МО(Рес.)`;
                 let resourceSKO = document.createElement('td');
-                resourceSKO.innerHTML = `СКО(Р${i + 1})`;
+                resourceSKO.innerHTML = `СКО(Рес.)`;
                 resourcesProps.appendChild(resourceMO);
                 resourcesProps.appendChild(resourceSKO);
             }
@@ -201,12 +201,12 @@
             table.append(resouces);
             table.append(resourcesProps);
 
-            for (let i = 0; i < productsNumber; i++) {
+            for (let i = 0; i < resourcesNumber; i++) {
                 let prodRow = document.createElement('tr');
                 let numCell = document.createElement('td');
                 numCell.innerHTML = `${i + 1}`;
                 prodRow.appendChild(numCell);
-                for (let j = 0; j < resourcesNumber; j++) {
+                for (let j = 0; j < productsNumber; j++) {
                     let resMCell = document.createElement('td');
                     let resSKOCell = document.createElement('td');
 
@@ -215,7 +215,7 @@
                     resMInput.setAttribute('size', 5);
                     resMInput.setAttribute('step', 0.01);
                     resMInput.setAttribute('min', 0);
-                    resMInput.value = data ? data['a'][i * resourcesNumber + j] : '0';
+                    resMInput.value = data ? data['a'][i * productsNumber + j] : '0';
                     resMInput.setAttribute('id', `a_${i}_${j}`);
                     resMCell.appendChild(resMInput);
 
@@ -224,7 +224,7 @@
                     resSKOInput.setAttribute('size', 5);
                     resSKOInput.setAttribute('step', 0.01);
                     resSKOInput.setAttribute('min', 0);
-                    resSKOInput.value = data ? data['s'][i * resourcesNumber + j] : '0';
+                    resSKOInput.value = data ? data['s'][i * productsNumber + j] : '0';
                     resSKOInput.setAttribute('id', `s_${i}_${j}`);
                     resSKOCell.appendChild(resSKOInput);
 
